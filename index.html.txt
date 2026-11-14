@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>중등 영어 펜맨십 & AI 필체 교정</title>
+  <style>
+    :root {
+      --primary: #4f46e5;
+      --bg: #f8fafc;
+      --line-blue: #93c5fd;
+      --line-red: #fca5a5;
+      --line-dark: #cbd5e1;
+    }
+    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: var(--bg); margin: 0; padding: 20px; color: #1e293b; }
+    .container { max-width: 900px; margin: 0 auto; background: white; padding: 30px; border-radius: 16px; box-shadow: 0 4px 20px rgba(0,0,0,0.08); }
+    h1 { color: var(--primary); text-align: center; margin-bottom: 24px; font-size: 24px; }
+    .hidden { display: none !important; }
+    
+    /* 로그인 카드 */
+    .card { background: #f1f5f9; padding: 24px; border-radius: 12px; margin-bottom: 20px; }
+    input, select { padding: 10px 14px; font-size: 16px; border: 1px solid #cbd5e1; border-radius: 8px; margin-right: 10px; margin-bottom: 10px; }
+    button { background: var(--primary); color: white; border: none; padding: 10px 20px; font-size: 16px; border-radius: 8px; cursor: pointer; font-weight: 600; }
+    button:hover { opacity: 0.9; }
+
+    /* 4선지 캔버스 스타일 */
+    .canvas-box { position: relative; width: 100%; height: 220px; background: white; border: 2px solid #334155; border-radius: 8px; margin: 20px 0; touch-action: none; overflow: hidden; }
+    .four-lines { position: absolute; width: 100%; height: 100%; top: 0; left: 0; pointer-events: none; display: flex; flex-direction: column; justify-content: space-between; padding: 20px 0; box-sizing: border-box; }
+    .line { width: 100%; height: 1px; }
+    .line-top { border-top: 1px dashed var(--line-blue); }
+    .line-mid { border-top: 1px dashed var(--line-red); }
+    .line-base { border-top: 2px solid var(--line-blue); }
+    .line-desc { border-top: 1px dashed var(--line-dark); }
+    
+    .guide-text-layer { position: absolute; top: 50%; left: 30px; transform: translateY(-50%); font-size: 48px; color: rgba(147, 197, 253, 0.35); font-family: monospace; font-weight: bold; pointer-events: none; white-space: nowrap; }
+    canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; cursor: crosshair; }
+
+    /* 대시보드 및 피드백 */
+    .feedback-box { background: #eff6ff; border-left: 4px solid var(--primary); padding: 15px; border-radius: 0 8px 8px 0; margin-top: 15px; }
+    .flex-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <h1>✏️ 중학교 영어 펜맨십 & AI 필체 교정</h1>
+
+  <!-- 로그인 화면 -->
+  <div id="login-section" class="card">
+    <h3>학생 로그인</h3>
+    <div class="flex-row">
+      <select id="grade-select">
+        <option value="1">중학교 1학년</option>
+        <option value="2">중학교 2학년</option>
+        <option value="3">중학교 3학년</option>
+      </select>
+      <input type="text" id="student-id" placeholder="학번 (예: 10215)">
+      <input type="password" id="student-pw" placeholder="비밀번호 (4자리)">
+      <button onclick="handleLogin()">시작하기</button>
+      <button onclick="openTeacherDashboard()" style="background: #059669;">교사 대시보드</button>
+    </div>
+  </div>
+
+  <!-- 학습 메인 화면 -->
+  <div id="app-section" class="hidden">
+    <div class="flex-row" style="justify-content: space-between; margin-bottom: 15px;">
+      <div><span id="user-display" style="font-weight: bold; color: var(--primary);"></span> 님 환영합니다!</div>
+      <div>
+        <label>차시 선택: </label>
+        <select id="chasi-select" onchange="changeChasi()"></select>
+      </div>
+      <button onclick="handleLogout()" style="background: #64748b;">로그아웃</button>
+    </div>
+
+    <div class="card" style="background: #f8fafc;">
+      <h4 id="chasi-title" style="margin-top:0;"></h4>
+      <p style="font-size: 14px; color: #64748b;">갤럭시탭 S펜으로 4선지 위에 따라 쓰거나 독자적으로 연습하세요.</p>
+      
+      <!-- 4선지 캔버스 영역 -->
+      <div class="canvas-box" id="canvas-container">
+        <div class="four-lines">
+          <div class="line line-top"></div>
+          <div class="line line-mid"></div>
+          <div class="line line-base"></div>
+          <div class="line line-desc"></div>
+        </div>
+        <div id="guide-text" class="guide-text-layer"></div>
+        <canvas id="writeCanvas"></canvas>
+      </div>
+
+      <div class="flex-row" style="justify-content: space-between;">
+        <button onclick="clearCanvas()" style="background: #ef4444;">지우기 (다시 쓰기)</button>
+        <button onclick="analyzeWithAI()">🤖 AI 비전 피드백 받기 & 저장</button>
+      </div>
+    </div>
+
+    <div id="ai-result-box" class="feedback-box hidden">
+      <h4>💡 AI 분석 및 코칭 피드백</h4>
+      <p id="ai-feedback-text">분석 중입니다...</p>
+    </div>
+  </div>
+
+  <!-- 교사 대시보드 화면 -->
+  <div id="teacher-section" class="hidden">
+    <h3>👩‍🏫 교사 포트폴리오 대시보드</h3>
+    <button onclick="closeTeacherDashboard()" style="background: #64748b; margin-bottom: 15px;">← 학습 화면으로 돌아가기</button>
+    <div id="portfolio-list" class="card">
+      <p>학생들의 제출 기록을 불러오는 중...</p>
+    </div>
+  </div>
+</div>
+
+<!-- Firebase 및 앱 스크립트 -->
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+  import { getFirestore, collection, setDoc, doc, getDocs, query, where } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyDZu_4GztNU5XJQLT3aC5_Z8UvjQLEmC_M",
+    authDomain: "english-handwriting-6a822.firebaseapp.com",
+    projectId: "english-handwriting-6a822",
+    storageBucket: "english-handwriting-6a822.firebasestorage.app",
+    messagingSenderId: "888239409520",
+    appId: "1:888239409520:web:ed08071f5adf38848ba7b5"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
+  window.db = db;
+  window.collection = collection;
+  window.setDoc = setDoc;
+  window.doc = doc;
+  window.getDocs = getDocs;
+  window.query = query;
+  window.where = where;
+</script>
+
+<script src="curriculum.js"></script>
+<script>
+  let currentUser = null;
+  let currentGrade = 1;
+  let currentChasiObj = null;
+
+  // 캔버스 설정
+  const canvas = document.getElementById('writeCanvas');
+  const ctx = canvas.getContext('2d');
+  let drawing = false;
+
+  function resizeCanvas() {
+    const box = document.getElementById('canvas-container');
+    canvas.width = box.clientWidth;
+    canvas.height = box.clientHeight;
+    ctx.strokeStyle = '#1e293b';
+    ctx.lineWidth = 3;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+  }
+  window.addEventListener('resize', resizeCanvas);
+
+  // S펜 및 터치 이벤트 핸들러 (팜레이젝션 포함)
+  canvas.addEventListener('pointerdown', (e) => {
+    drawing = true;
+    ctx.beginPath();
+    ctx.moveTo(e.offsetX, e.offsetY);
+  });
+  canvas.addEventListener('pointermove', (e) => {
+    if (!drawing) return;
+    ctx.lineTo(e.offsetX, e.offsetY);
+    ctx.stroke();
+  });
+  canvas.addEventListener('pointerup', () => { drawing = false; });
+  canvas.addEventListener('pointerleave', () => { drawing = false; });
+
+  function clearCanvas() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+  }
+
+  function handleLogin() {
+    const grade = document.getElementById('grade-select').value;
+    const id = document.getElementById('student-id').value.trim();
+    const pw = document.getElementById('student-pw').value.trim();
+
+    if (!id || !pw) {
+      alert('학번과 비밀번호를 입력해주세요!');
+      return;
+    }
+
+    currentGrade = parseInt(grade);
+    currentUser = { id, grade: currentGrade };
+    document.getElementById('user-display').innerText = `[${grade}학년] 학번: ${id}`;
+    
+    document.getElementById('login-section').classList.add('hidden');
+    document.getElementById('app-section').classList.remove('hidden');
+
+    initChasiDropdown();
+    resizeCanvas();
+  }
+
+  function handleLogout() {
+    currentUser = null;
+    document.getElementById('app-section').classList.add('hidden');
+    document.getElementById('login-section').classList.remove('hidden');
+  }
+
+  function initChasiDropdown() {
+    const select = document.getElementById('chasi-select');
+    select.innerHTML = '';
+    const list = CURRICULUM_DATA[currentGrade];
+    list.forEach(item => {
+      const opt = document.createElement('option');
+      opt.value = item.chasi;
+      opt.innerText = `${item.chasi}차시: ${item.title}`;
+      select.appendChild(opt);
+    });
+    changeChasi();
+  }
+
+  function changeChasi() {
+    const chasiNum = parseInt(document.getElementById('chasi-select').value);
+    currentChasiObj = CURRICULUM_DATA[currentGrade].find(item => item.chasi === chasiNum);
+    document.getElementById('chasi-title').innerText = `${currentChasiObj.chasi}차시 연습목표: ${currentChasiObj.title}`;
+    document.getElementById('guide-text').innerText = currentChasiObj.guideText;
+    clearCanvas();
+    document.getElementById('ai-result-box').classList.add('hidden');
+  }
+
+  // Gemini API를 활용한 비전 분석
+  async function analyzeWithAI() {
+    const dataUrl = canvas.toDataURL('image/png');
+    const base64Data = dataUrl.split(',')[1];
+    
+    document.getElementById('ai-result-box').classList.remove('hidden');
+    document.getElementById('ai-feedback-text').innerText = "🤖 AI가 학생의 4선지 필기를 정밀 분석 중입니다...";
+
+    const apiKey = "AQ.Ab8RN6JQFLzkYHbIJJmoYTIiwnipUBBN_SQq9BUGHuNHt92Nuw";
+    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+
+    const promptText = `당신은 중학교 영어 교사입니다. 학생들이 4선지 노트에 쓴 영어 필기 이미지입니다. 
+목표 문장/알파벳: "${currentChasiObj.guideText}"
+이미지에 적힌 학생의 필기를 분석하여 아래 3가지 항목으로 친절하고 구체적으로 피드백해주세요:
+1. AI가 읽어낸 학생의 글자 (OCR 인식 결과)
+2. 4선지 기준선(Base-line, Ascender/Descender 선) 준수 여부 및 잘한 점
+3. 개선을 위한 따뜻한 조언 1가지 (예: 'g가 q처럼 보여요', '베이스라인에 조금 더 밀착해 보세요')`;
+
+    try {
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{
+            parts: [
+              { text: promptText },
+              { inline_data: { mime_type: "image/png", data: base64Data } }
+            ]
+          }]
+        })
+      });
+
+      const result = await response.json();
+      const feedback = result.candidates[0].content.parts[0].text;
+      document.getElementById('ai-feedback-text').innerHTML = feedback.replace(/\n/g, '<br>');
+
+      // 파이어베이스 DB에 결과 저장
+      const docId = `${currentUser.id}_g${currentGrade}_c${currentChasiObj.chasi}`;
+      await window.setDoc(window.doc(window.db, "submissions", docId), {
+        studentId: currentUser.id,
+        grade: currentGrade,
+        chasi: currentChasiObj.chasi,
+        chasiTitle: currentChasiObj.title,
+        imageData: dataUrl,
+        feedback: feedback,
+        timestamp: new Date().toISOString()
+      });
+
+    } catch (error) {
+      console.error(error);
+      document.getElementById('ai-feedback-text').innerText = "❌ AI 분석 중 오류가 발생했습니다. API 키를 확인해주세요.";
+    }
+  }
+
+  // 교사 대시보드 보기
+  async function openTeacherDashboard() {
+    document.getElementById('login-section').classList.add('hidden');
+    document.getElementById('teacher-section').classList.remove('hidden');
+    
+    const listDiv = document.getElementById('portfolio-list');
+    listDiv.innerHTML = '<p>학생 제출 데이터를 불러오는 중...</p>';
+
+    try {
+      const querySnapshot = await window.getDocs(window.collection(window.db, "submissions"));
+      if (querySnapshot.empty) {
+        listDiv.innerHTML = '<p>아직 제출된 학생 데이터가 없습니다.</p>';
+        return;
+      }
+
+      let html = '<table border="1" cellpadding="8" style="width:100%; border-collapse: collapse; text-align: left;">';
+      html += '<tr><th>학번</th><th>학년</th><th>차시</th><th>제출 시간</th><th>AI 피드백 요약</th><th>필기 이미지</th></tr>';
+      
+      querySnapshot.forEach((doc) => {
+        const d = doc.data();
+        html += `<tr>
+          <td><b>${d.studentId}</b></td>
+          <td>${d.grade}학년</td>
+          <td>${d.chasi}차시</td>
+          <td>${d.timestamp.substring(5, 16)}</td>
+          <td><small>${d.feedback.substring(0, 80)}...</small></td>
+          <td><img src="${d.imageData}" width="120" style="border:1px solid #ccc; border-radius:4px;"></td>
+        </tr>`;
+      });
+      html += '</table>';
+      listDiv.innerHTML = html;
+    } catch (e) {
+      console.error(e);
+      listDiv.innerHTML = '<p>데이터를 불러오는 중 오류가 발생했습니다. 파이어베이스 설정을 확인해주세요.</p>';
+    }
+  }
+
+  function closeTeacherDashboard() {
+    document.getElementById('teacher-section').classList.add('hidden');
+    document.getElementById('login-section').classList.remove('hidden');
+  }
+</script>
+
+</body>
+</html>
